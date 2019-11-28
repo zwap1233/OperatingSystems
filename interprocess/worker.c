@@ -2,8 +2,8 @@
  * Operating Systems {2INCO} Practical Assignment
  * Interprocess Communication
  *
- * STUDENT_NAME_1 (STUDENT_NR_1)
- * STUDENT_NAME_2 (STUDENT_NR_2)
+ * STUDENT_NAME_1 (Ivo Kersten)
+ * STUDENT_NAME_2 (Wouter Schoenmakers)
  *
  * Grading:
  * Students who hand in clean code that fully satisfies the minimum requirements will get an 8. 
@@ -26,67 +26,119 @@
 #include "uint128.h"
 #include "md5s.h"
 
-char* findkey(uint128_t des_hash, int len, char *str);
+int findkey(uint128_t des_hash, int len, char *str);
 
 static void rsleep (int t);
 
-char begin_letter = 'a';
-char end_letter = 'd';
+mqd_t               mq_fd_request;
+mqd_t               mq_fd_response;
+MQ_REQUEST_MESSAGE  req;
+MQ_RESPONSE_MESSAGE rsp;
 
-int main (int argc, char * argv[])
-{
-    // TODO:
-    // (see message_queue_test() in interprocess_basic.c)
-    //  * open the two message queues (whose names are provided in the arguments)
-    //  * repeatingly:
-    //      - read from a message queue the new job to do
-    //      - wait a random amount of time (e.g. rsleep(10000);)
-    //      - do that job 
-    //      - write the results to a message queue
-    //    until there are no more tasks to do
-    //  * close the message queues
-		
-		uint128_t hash = UINT128(0x900150983cd24fb0,0xd6963f7d28e17f72);
-		printf ("0x%016lx%016lx\n\n", HI(hash), LO(hash));
-		
-		char *str = calloc(7,1);
-		str[0] = 'a';
-		
-		char *res = findkey(hash, 1, str);		
-		
-		if(res != 0){
-			printf("%s\n", res);
-		}	else {
-			printf("failed\n");		
-		}
+char start_letter;
+char last_letter;
 
-		free(str);
+char 			*mq_name_req;
+char 			*mq_name_rsp;
 
-		// FIRST ARG IS REQUEST QEUE SECOND RESPONSE    
-    return (0);
+int main (int argc, char * argv[]){
+  // TODO:
+  // (see message_queue_test() in interprocess_basic.c)
+  //  * open the two message queues (whose names are provided in the arguments)
+  //  * repeatingly:
+  //      - read from a message queue the new job to do
+  //      - wait a random amount of time (e.g. rsleep(10000);)
+  //      - do that job
+  //      - write the results to a message queue
+  //    until there are no more tasks to do
+  //  * close the message queues
+
+  if(argc == 3){
+    if(strcmp(argv[0], "worker") == 0){
+      mq_name_req = argv[1];
+      mq_name_rsp = argv[2];
+    } else {
+      printf("ERROR: Wrong program name?");
+    }
+  } else {
+    printf("ERROR: Wrong number of arguments\n");
+    return -1;
+  }
+
+  //printf("Child started with pid: %d, req_que: %s and rsp_que: %s\n", getpid(), mq_name_req, mq_name_rsp);
+
+  mq_fd_request = mq_open(mq_name_req, O_RDONLY);
+  mq_fd_response = mq_open(mq_name_rsp, O_WRONLY);
+
+  //printf("Child receiving ...\n");
+
+  char str[7];
+  while(1){
+    if(mq_receive(mq_fd_request, (char *) &req, sizeof (req), 0) != -1){
+      if(req.terminate == 1){
+        //printf("Child received request to terminate\n");
+        break;
+      }
+
+      start_letter = req.start_letter;
+      last_letter = req.last_letter;
+
+      memset(&str, 0, 7);
+      str[0] = req.letter;
+
+      //printf("Child received request with letter: %c and alphabeth: %c-%c\n", req.letter, start_letter, last_letter);
+
+      int res = findkey(req.hash, 1, str);
+      if(res){
+        //printf("Child found key: %s\n", str);
+        rsp.hash = req.hash;
+        strncpy(rsp.string, str, 7);
+
+        while(mq_send (mq_fd_response, (char *) &rsp, sizeof (rsp), 0) == -1){
+          if(errno != EAGAIN){
+            printf("ERROR: child could not send rsp message\n");
+            break;
+          }
+
+          rsleep(100);
+        }
+      }	else {
+        //printf("Child failed to find key\n");
+        //dont give response if it couldnt find the hash
+      }
+    }
+
+    rsleep(200);
+  }
+
+  //printf("Child shutting down\n");
+
+  mq_close(mq_fd_response);
+  mq_close(mq_fd_request);
+
+	// FIRST ARG IS REQUEST QEUE SECOND RESPONSE
+  return (0);
 }
 
-char* findkey(uint128_t des_hash, int len, char *str){
+int findkey(uint128_t des_hash, int len, char *str){
 	uint128_t calc_hash = md5s(str, len);
 	if(calc_hash == des_hash){
-		return str;
+		return 1;
 	} else if(len < MAX_MESSAGE_LENGTH) {
 		char c;
-		for(c = begin_letter; c <= end_letter; c++){
-			str[len] = c;
-			
-			int i;			
+		for(c = start_letter; c <= last_letter; ++c){
+      str[len] = c;
+
+			int i;
 			for(i = len+1; i < MAX_MESSAGE_LENGTH; i++){
-				str[i] = '\0';			
+				str[i] = '\0';
 			}
-			
-			char *res = findkey(des_hash, len+1, str);
-			if(res != 0){
-				return str;			
-			}
+
+			if(findkey(des_hash, len+1, str)){
+        return 1;
+      }
 		}
 	}
-	
 	return 0;
 }
 
@@ -100,7 +152,7 @@ char* findkey(uint128_t des_hash, int len, char *str){
 static void rsleep (int t)
 {
     static bool first_call = true;
-    
+
     if (first_call == true)
     {
         srandom (time (NULL) % getpid ());
