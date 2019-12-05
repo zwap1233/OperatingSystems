@@ -1,16 +1,16 @@
-/* 
+/*
  * Operating Systems {2INC0} Practical Assignment
  * Threaded application
  *
  * Joris Geurts
- * 
+ *
  */
 
 #ifndef _FLIP_H_
 #define _FLIP_H_
 
 #include "uint128.h"
- 
+
 /**
  * NROF_PIECES: size of the board; number of pieces to be flipped
  */

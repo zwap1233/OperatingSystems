@@ -1,5 +1,5 @@
-/* 
- * Operating Systems {2INC0} Practical 
+/*
+ * Operating Systems {2INC0} Practical
  * 2016/2019 (c) Joris Geurts
  *
  * This program contains some C constructs which might be useful for
@@ -56,11 +56,11 @@ static void
 bit_test (void)
 {
     uint128_t     v;
-    
+
     // set all bits to 1
     v = ~0;
-    
-    printf ("v (all 1's) : %lx%016lx\n", HI(v), LO(v)); 
+
+    printf ("v (all 1's) : %lx%016lx\n", HI(v), LO(v));
     BIT_CLEAR (v, 4);
     BIT_CLEAR (v, 127);
     BIT_CLEAR (v, 126);
@@ -85,24 +85,23 @@ bit_test (void)
     BIT_SET (v, 4);
     printf ("v (many 1's): %lx%016lx\n", HI(v), LO(v));
     printf ("\n");
-}    
-    
-    
+}
+
 static void *
 my_thread (void * arg)
 {
-    int *   argi; 
-    int     i;      
+    int *   argi;
+    int     i;
     int *   rtnval;
-    
+
     argi = (int *) arg;     // proper casting before dereferencing (could also be done in one statement)
     i = *argi;              // get the integer value of the pointer
     free (arg);             // we retrieved the integer value, so now the pointer can be deleted
-    
+
     printf ("        %lx: thread started; parameter=%d\n", pthread_self(), i);
-    
+
     sleep (1);
-    
+
     // a return value to be given back to the calling main-thread
     rtnval = malloc (sizeof (int)); // will be freed by the parent-thread
     *rtnval = 42;           // assign an arbitrary value...
@@ -162,11 +161,11 @@ thread_mutex_test (void)
     sleep (3);
     printf ("%lx: starting second thread ...\n", pthread_self());
     pthread_create (&my_threads[1], NULL, my_mutex_thread, NULL);
-    
+
     // wait for threads, but we are not interested in the return value 
     pthread_join (my_threads[0], NULL);
-    pthread_join (my_threads[1], NULL); 
-    
+    pthread_join (my_threads[1], NULL);
+
     printf ("%lx: threads ready\n", pthread_self());
     printf ("\n");
 }
@@ -179,7 +178,7 @@ int main (void)
     bit_test();
     thread_test();
     thread_mutex_test();
-    
+
     return (0);
 }
 
