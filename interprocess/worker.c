@@ -100,7 +100,7 @@ int main (int argc, char * argv[]){
             break;
           }
 
-          rsleep(100);
+          sleep(0);
         }
       }	else {
         //printf("Child failed to find key\n");
@@ -108,7 +108,7 @@ int main (int argc, char * argv[]){
       }
     }
 
-    rsleep(200);
+    rsleep(10000);
   }
 
   //printf("Child shutting down\n");
