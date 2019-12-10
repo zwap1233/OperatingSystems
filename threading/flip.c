@@ -18,11 +18,11 @@
 #include <errno.h>          // for perror()
 #include <pthread.h>
 
-#include "uint128.h"
 #include "flip.h"
 
-static void * flip_multiples(void *arg);
-static void flip_piece(int n);
+pthread_mutex_t list_mutex = PTHREAD_MUTEX_INITIALIZER;
+finished_thread_t *start = NULL;
+finished_thread_t *last = NULL;
 
 int main (void){
   // TODO: start threads to flip the pieces and output the results
@@ -32,26 +32,74 @@ int main (void){
   int *parm_n;
   pthread_t thread_id;
 
-  parm_n = malloc(sizeof(int));
-
+  //init buffers
   int i;
   char *buf = (char *) buffer;
   for(i = 0; i < (NROF_PIECES/128 +1)*16; ++i){
     buf[i] = 0xff;
   }
 
+  //init mutexs
+  for(i = 0; i < NROF_PIECES/128 +1; ++i){
+    pthread_mutex_init(&mutexs[i], NULL);
+  }
   /*for(i = 0; i < (NROF_PIECES/128 +1); ++i){
     printf("0x%016lx,0x%016lx\n", HI(buffer[i]), LO(buffer[i]));
   }
   printf("\n");*/
 
-  for(i = 1; i <= NROF_PIECES; ++i){
-    *parm_n = i;
-    pthread_create(&thread_id, NULL, flip_multiples, parm_n);
-    //sleep(0);
-    pthread_join(thread_id, NULL);
+
+  //create threads and distribute jobs
+  int threads = 0;
+  for(i = 1; i < NROF_PIECES; i=i){
+    if(threads < NROF_THREADS){
+
+      int *parm_n = malloc(sizeof(int));
+      *parm_n = i;
+      pthread_create(&thread_id, NULL, flip_multiples, parm_n);
+
+      ++threads;
+      ++i;
+    }
+
+    pthread_mutex_lock(&list_mutex);
+    if(start != NULL){
+      pthread_join(start->thread_id, NULL);
+      finished_thread_t *next_start = start->next;
+
+      if(next_start == NULL){
+        last = NULL;
+      }
+
+      free(start);
+      start = next_start;
+
+      --threads;
+    }
+    pthread_mutex_unlock(&list_mutex);
   }
 
+  //join remaining threads
+  while(start != NULL || threads > 0){
+    if(start != NULL){
+      pthread_mutex_lock(&list_mutex);
+
+      pthread_join(start->thread_id, NULL);
+      finished_thread_t *next_start = start->next;
+
+      if(next_start == NULL){
+        last = NULL;
+      }
+
+      free(start);
+      start = next_start;
+      pthread_mutex_unlock(&list_mutex);
+
+      --threads;
+    }
+  }
+
+  //printing the results
   for(i = 0; i < NROF_PIECES; ++i){
     int buf_num = i / 128;
     int bit_num = i % 128;
@@ -64,6 +112,26 @@ int main (void){
   return (0);
 }
 
+static void signal_finished(){
+  pthread_mutex_lock(&list_mutex);
+
+  if(last == NULL){
+    last = malloc(sizeof(finished_thread_t));
+    last->thread_id = pthread_self();
+    last->next = NULL;
+    start = last;
+  } else {
+    finished_thread_t *item = malloc(sizeof(finished_thread_t));
+    item->thread_id = pthread_self();
+    item->next = NULL;
+
+    last->next = item;
+    last = item;
+  }
+
+  pthread_mutex_unlock(&list_mutex);
+}
+
 static void * flip_multiples(void *arg){
   int n = *((int *) arg);
 
@@ -71,6 +139,10 @@ static void * flip_multiples(void *arg){
   for(i = 1; i*n <= NROF_PIECES; ++i){
     flip_piece(i*n);
   }
+
+  signal_finished();
+
+  free(arg);
 
   return NULL;
 }
@@ -84,9 +156,13 @@ static void flip_piece(int n){
   int buf_num = n / 128;
   int bit_num = n % 128;
 
+  pthread_mutex_lock(&mutexs[buf_num]);
+
   if((buffer[buf_num] & (((uint128_t) 0x1) << bit_num)) > 0){
     buffer[buf_num] = buffer[buf_num] & ~(((uint128_t) 0x1) << bit_num); //set low
   } else {
     buffer[buf_num] = buffer[buf_num] | (((uint128_t) 0x1) << bit_num); //set high
   }
+
+  pthread_mutex_unlock(&mutexs[buf_num]);
 }
