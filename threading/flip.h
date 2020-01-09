@@ -11,15 +11,6 @@
 
 #include "uint128.h"
 
-static void signal_finished();
-static void * flip_multiples(void *arg);
-static void flip_piece(int n);
-
-typedef struct finished_thread {
-  struct finished_thread *next;
-  pthread_t thread_id;
-} finished_thread_t;
-
 /**
  * NROF_PIECES: size of the board; number of pieces to be flipped
  */
@@ -34,7 +25,6 @@ typedef struct finished_thread {
 /**
  * buffer[]: datastructure of the pieces; each piece is represented by one bit
  */
-static pthread_mutex_t mutexs[(NROF_PIECES/128) + 1];
 static uint128_t			buffer [(NROF_PIECES/128) + 1];
 
 #endif
