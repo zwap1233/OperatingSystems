@@ -2,8 +2,8 @@
  * Operating Systems {2INCO} Practical Assignment
  * Threaded Application
  *
- * STUDENT_NAME_1 (STUDENT_NR_1)
- * STUDENT_NAME_2 (STUDENT_NR_2)
+ * Wouter Schoenmakers (1017338)
+ * Ivo Kersten 			   (1233717)
  *
  * Grading:
  * Students who hand in clean code that fully satisfies the minimum requirements will get an 8. 
@@ -19,6 +19,20 @@
 #include <pthread.h>
 
 #include "flip.h"
+
+static void signal_finished();
+static void * flip_multiples(void *arg);
+static void flip_piece(int n);
+
+typedef struct finished_thread {
+  struct finished_thread *next;
+  pthread_t thread_id;
+} finished_thread_t;
+
+static pthread_mutex_t mutexs[(NROF_PIECES/128) + 1];
+
+pthread_mutex_t cond_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond_var = PTHREAD_COND_INITIALIZER;
 
 pthread_mutex_t list_mutex = PTHREAD_MUTEX_INITIALIZER;
 finished_thread_t *start = NULL;
@@ -51,8 +65,8 @@ int main (void){
 
   //create threads and distribute jobs
   int threads = 0;
-  for(i = 1; i < NROF_PIECES; i=i){
-    if(threads < NROF_THREADS){
+  for(i = 2; i < NROF_PIECES; i=i){
+    while(threads < NROF_THREADS && i < NROF_PIECES){
 
       int *parm_n = malloc(sizeof(int));
       *parm_n = i;
@@ -61,6 +75,12 @@ int main (void){
       ++threads;
       ++i;
     }
+    
+    while(start == NULL){
+			pthread_mutex_lock(&cond_mutex);
+			pthread_cond_wait(&cond_var, &cond_mutex);
+			pthread_mutex_unlock(&cond_mutex);
+		}
 
     pthread_mutex_lock(&list_mutex);
     if(start != NULL){
@@ -100,11 +120,11 @@ int main (void){
   }
 
   //printing the results
-  for(i = 0; i < NROF_PIECES; ++i){
+  for(i = 1; i < NROF_PIECES; ++i){
     int buf_num = i / 128;
     int bit_num = i % 128;
 
-    if((buffer[buf_num] & (((uint128_t) 0x1) << bit_num)) == 0){
+    if((buffer[buf_num] & (((uint128_t) 0x1) << bit_num)) > 0){
       printf("%d\n", i);
     }
   }
@@ -130,6 +150,8 @@ static void signal_finished(){
   }
 
   pthread_mutex_unlock(&list_mutex);
+
+	pthread_cond_signal(&cond_var);
 }
 
 static void * flip_multiples(void *arg){
@@ -140,9 +162,9 @@ static void * flip_multiples(void *arg){
     flip_piece(i*n);
   }
 
-  signal_finished();
-
   free(arg);
+
+  signal_finished();
 
   return NULL;
 }
@@ -155,8 +177,10 @@ static void flip_piece(int n){
 
   int buf_num = n / 128;
   int bit_num = n % 128;
-
-  pthread_mutex_lock(&mutexs[buf_num]);
+	
+	
+	pthread_mutex_lock(&mutexs[buf_num]);
+  //pthread_mutex_lock(&mutexs[0]);
 
   if((buffer[buf_num] & (((uint128_t) 0x1) << bit_num)) > 0){
     buffer[buf_num] = buffer[buf_num] & ~(((uint128_t) 0x1) << bit_num); //set low
@@ -164,5 +188,6 @@ static void flip_piece(int n){
     buffer[buf_num] = buffer[buf_num] | (((uint128_t) 0x1) << bit_num); //set high
   }
 
-  pthread_mutex_unlock(&mutexs[buf_num]);
+	pthread_mutex_unlock(&mutexs[buf_num]);
+  //pthread_mutex_unlock(&mutexs[0]);
 }
